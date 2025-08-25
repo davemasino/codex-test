@@ -1,0 +1,8 @@
+[run]
+omit =
+    src/codex_test/__main__.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+
