@@ -51,6 +51,28 @@ make test             # or: make coverage
   - Print SQL to stdout (default).
   - Write files with `--output-dir out/` (one `<mapping>.sql` per mapping).
 
+### Example
+- Input (IDMC JSON):
+```json
+{
+  "mappings": [
+    {
+      "name": "m_simple",
+      "source": {"name": "SRC_TABLE", "fields": ["id", "name"]},
+      "target": {"name": "TGT_TABLE", "fields": ["id", "name"]}
+    }
+  ]
+}
+```
+
+- Output (generated SQL):
+```sql
+-- Mapping: m_simple -> TGT_TABLE
+INSERT INTO TGT_TABLE (id, name)
+SELECT id, name
+FROM SRC_TABLE;
+```
+
 ## Limitations
 - Advanced Informatica transformations (expressions, filters, lookups, aggregations, conditional logic, etc.) are not currently modeled.
 - Join inference relies on identical column names across sources; aliasing or mapping logic is not interpreted.
