@@ -28,4 +28,5 @@ def test_convert_mappings_to_sql_idmc(tmp_path: Path) -> None:
     assert set(out.keys()) == {"m_simple"}
     sql = out["m_simple"]
     assert "INSERT INTO TGT_TABLE (id, name)" in sql
-    assert "SELECT id, name FROM SRC_TABLE;" in sql
+    assert "SELECT id, name" in sql
+    assert "FROM SRC_TABLE;" in sql

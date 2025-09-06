@@ -99,10 +99,58 @@ def convert_mappings_to_sql(workflow_path: str | Path) -> dict[str, str]:
             data = json.loads(p.read_text())
         except Exception:
             return {}
-        for m_name, src_name, tgt_name, cols in _idmc_mapping_details(data):
-            sql_by_mapping[m_name] = _emit_insert_select(
-                m_name, tgt_name, src_name, cols
-            )
+        # Build SQL for each mapping, supporting multiple sources/targets.
+        for plan in _idmc_mapping_plans(data):
+            m_name = plan["name"]
+            sources = plan["sources"]  # list[(name, fields)]
+            targets = plan["targets"]  # list[(name, fields)]
+
+            if not sources or not targets:
+                sql_by_mapping[m_name] = (
+                    f"-- Mapping: {m_name} (unsupported or underspecified)\n"
+                    f"-- Requires at least one source and one target.\n"
+                    f"SELECT /* mapping {m_name} */ *;\n"
+                )
+                continue
+
+            sel_list, from_sql, note = _build_select_from_sources(sources, None)
+
+            # For each target, generate an INSERT using target's field order
+            statements: list[str] = []
+            for tgt_name, tgt_fields in targets:
+                cols = tgt_fields or []
+                # If specific target columns provided, narrow the select list order
+                if cols:
+                    # Recompute select list in target order with qualification as needed
+                    sel_list_target, _, _ = _build_select_from_sources(sources, cols)
+                    final_sel = sel_list_target
+                    cols_csv = ", ".join(cols)
+                else:
+                    final_sel = sel_list
+                    cols_csv = (
+                        ", ".join(_union_fields(sources)) if final_sel != "*" else ""
+                    )
+
+                head = f"-- Mapping: {m_name} -> {tgt_name}\n"
+                if note:
+                    head += f"-- {note}\n"
+
+                if cols_csv:
+                    stmt = (
+                        head
+                        + f"INSERT INTO {tgt_name} ({cols_csv})\n"
+                        + f"SELECT {final_sel}\n"
+                        + f"{from_sql};\n"
+                    )
+                else:
+                    stmt = (
+                        head
+                        + f"INSERT INTO {tgt_name}\nSELECT {final_sel}\n{from_sql};\n"
+                    )
+                statements.append(stmt)
+
+            sql_by_mapping[m_name] = "\n".join(statements)
+
         return sql_by_mapping
 
     # PowerCenter XML path (legacy support)
@@ -196,58 +244,207 @@ def _iter_idmc_mappings(data: dict) -> list[dict]:
 
 
 def _normalize_field_list(fields: object) -> list[str]:
+    """Extract a flat list of column names from varied shapes.
+
+    Supported inputs:
+    - list[str]
+    - list[dict] with keys: name/NAME
+    - dicts containing 'fields'/'columns'/'ports'/'children' recursively
+    - dict with 'schema': { 'fields': [...] }
+    - dict with 'items': [...]
+    """
     cols: list[str] = []
-    if isinstance(fields, list):
-        for f in fields:
-            if isinstance(f, str):
-                nm = f.strip()
-                if nm:
-                    cols.append(nm)
-            elif isinstance(f, dict):
-                nm = str(f.get("name") or f.get("NAME") or "").strip()
-                if nm:
-                    cols.append(nm)
-    return cols
+
+    def add_name(n: object) -> None:
+        if isinstance(n, str):
+            nm = n.strip()
+        else:
+            nm = str(n or "").strip()
+        if nm:
+            cols.append(nm)
+
+    def walk(node: object) -> None:
+        if node is None:
+            return
+        if isinstance(node, list):
+            for it in node:
+                walk(it)
+            return
+        if isinstance(node, dict):
+            # direct name
+            if any(k in node for k in ("name", "NAME")):
+                add_name(node.get("name") or node.get("NAME"))
+            # nested collections
+            for k in ("fields", "columns", "ports", "children", "items"):
+                if k in node:
+                    walk(node[k])
+            if "schema" in node and isinstance(node["schema"], dict):
+                if "fields" in node["schema"]:
+                    walk(node["schema"]["fields"])
+            return
+        # leaf scalar
+        add_name(node)
+
+    walk(fields)
+    # Preserve order but deduplicate case-insensitively
+    seen: set[str] = set()
+    unique: list[str] = []
+    for c in cols:
+        key = c.lower()
+        if key not in seen:
+            seen.add(key)
+            unique.append(c)
+    return unique
 
 
-def _idmc_mapping_details(data: dict):
-    """Yield tuples of (mapping_name, source_name, target_name, columns)."""
+def _idmc_mapping_plans(data: dict) -> list[dict]:
+    """Return normalized mapping plans with sources and targets.
+
+    A plan is: {"name": str, "sources": list[(name, fields)],
+    "targets": list[(name, fields)]}
+    Accepts both singular and plural keys (source/sources, target/targets).
+    """
+    plans: list[dict] = []
     for m in _iter_idmc_mappings(data):
         m_name = (
             str(m.get("name") or m.get("NAME") or "UNKNOWN_MAPPING").strip()
             or "UNKNOWN_MAPPING"
         )
 
-        src = m.get("source") or {}
-        tgt = m.get("target") or {}
+        sources_obj = m.get("sources") if "sources" in m else m.get("source")
+        targets_obj = m.get("targets") if "targets" in m else m.get("target")
 
-        # Some structures may have arrays of sources/targets; pick the first
-        if isinstance(src, list) and src:
-            src = src[0]
-        if isinstance(tgt, list) and tgt:
-            tgt = tgt[0]
+        sources = _coerce_endpoints(sources_obj, default_name="SOURCE")
+        targets = _coerce_endpoints(targets_obj, default_name="TARGET")
 
-        src_name = (
-            _text_identifier(
-                str((src or {}).get("name") or (src or {}).get("NAME") or "SOURCE")
+        plans.append({"name": m_name, "sources": sources, "targets": targets})
+    return plans
+
+
+def _coerce_endpoints(obj: object, default_name: str) -> list[tuple[str, list[str]]]:
+    """Normalize endpoint(s) to a list of (name, fields).
+
+    Supports singular dict, list of dicts, or list of names/field dicts.
+    Recognizes fields under keys: fields, columns, ports, schema.fields, items.
+    """
+    items: list[object] = []
+    if obj is None:
+        return []
+    if isinstance(obj, list):
+        items = obj
+    else:
+        items = [obj]
+
+    results: list[tuple[str, list[str]]] = []
+    for it in items:
+        name = default_name
+        f_list: list[str] = []
+        if isinstance(it, str):
+            name = _text_identifier(it) or default_name
+        elif isinstance(it, dict):
+            name = (
+                _text_identifier(str(it.get("name") or it.get("NAME") or default_name))
+                or default_name
             )
-            or "SOURCE"
-        )
-        tgt_name = (
-            _text_identifier(
-                str((tgt or {}).get("name") or (tgt or {}).get("NAME") or "TARGET")
-            )
-            or "TARGET"
-        )
+            # fields under various keys
+            for k in ("fields", "columns", "ports", "schema", "items"):
+                if k in it:
+                    f_list.extend(_normalize_field_list(it[k]))
+        # Deduplicate while preserving order
+        seen: set[str] = set()
+        uniq_fields: list[str] = []
+        for c in f_list:
+            key = c.lower()
+            if key not in seen:
+                seen.add(key)
+                uniq_fields.append(c)
+        results.append((name, uniq_fields))
+    return results
 
-        # Columns: prefer target fields' order, intersect with source if present
-        tgt_fields = _normalize_field_list((tgt or {}).get("fields"))
-        src_fields = _normalize_field_list((src or {}).get("fields"))
 
-        if tgt_fields and src_fields:
-            src_set = {c.lower() for c in src_fields}
-            cols = [c for c in tgt_fields if c.lower() in src_set]
+def _union_fields(sources: list[tuple[str, list[str]]]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for _, fields in sources:
+        for c in fields:
+            k = c.lower()
+            if k not in seen:
+                seen.add(k)
+                out.append(c)
+    return out
+
+
+def _common_fields(sources: list[tuple[str, list[str]]]) -> list[str]:
+    if not sources:
+        return []
+    common = {c.lower() for c in sources[0][1]}
+    for _, fields in sources[1:]:
+        common &= {c.lower() for c in fields}
+    # return original-case using first source ordering
+    return [c for c in sources[0][1] if c.lower() in common]
+
+
+def _build_select_from_sources(
+    sources: list[tuple[str, list[str]]], target_cols: list[str] | None
+) -> tuple[str, str, str | None]:
+    """Return (select_list, from_sql, note).
+
+    - If multiple sources share columns, JOIN ... USING(common_cols).
+    - If no common columns, CROSS JOIN with a note.
+    - Select list uses target_cols order if provided; otherwise union of source fields.
+    - Qualify columns when needed to disambiguate.
+    """
+    if len(sources) == 1:
+        src_name, fields = sources[0]
+        cols = target_cols if target_cols else (fields or ["*"])
+        # qualify only if ambiguous (single source -> no need)
+        sel = ", ".join(cols) if cols != ["*"] else "*"
+        return sel, f"FROM {src_name}", None
+
+    commons = _common_fields(sources)
+    if commons:
+        using_csv = ", ".join(commons)
+        # Build chained INNER JOINs with USING
+        from_parts = [f"FROM {sources[0][0]}"]
+        for src_name, _ in sources[1:]:
+            from_parts.append(f"JOIN {src_name} USING ({using_csv})")
+        from_sql = "\n".join(from_parts)
+        note = None
+    else:
+        # CROSS JOIN if no shared fields
+        from_sql = "\n".join(
+            [f"FROM {sources[0][0]}"] + [f"CROSS JOIN {s[0]}" for s in sources[1:]]
+        )
+        note = "No common columns across sources; used CROSS JOIN"
+
+    # Determine select list
+    if target_cols:
+        wanted = [c for c in target_cols if c]
+    else:
+        wanted = _union_fields(sources)
+
+    # If commons are used, columns in commons can be unqualified
+    commons_lc = {c.lower() for c in commons}
+
+    # Map to which source contains a column
+    def owner(col: str) -> str | None:
+        cl = col.lower()
+        for src_name, fields in sources:
+            if any(f.lower() == cl for f in fields):
+                return src_name
+        return None
+
+    select_exprs: list[str] = []
+    for c in wanted:
+        if c.lower() in commons_lc:
+            select_exprs.append(c)
         else:
-            cols = tgt_fields or src_fields
+            src = owner(c)
+            if src:
+                select_exprs.append(f"{src}.{c}")
+            else:
+                # Column not present; project NULL as placeholder
+                select_exprs.append(f"NULL AS {c}")
 
-        yield m_name, src_name, tgt_name, cols
+    sel = ", ".join(select_exprs) if select_exprs else "*"
+    return sel, from_sql, note
