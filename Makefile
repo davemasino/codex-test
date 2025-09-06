@@ -23,7 +23,7 @@ coverage:
 	$(UV) run pytest -q --cov=src --cov-report=term-missing
 
 run:
-        $(UV) run python -m codex_test $(ARGS)
+	$(UV) run python -m codex_test $(ARGS)
 
 clean:
 	find . -name "__pycache__" -type d -prune -exec rm -rf {} +
