@@ -51,8 +51,8 @@ make test             # or: make coverage
   - Print SQL to stdout (default).
   - Write files with `--output-dir out/` (one `<mapping>.sql` per mapping).
 
-### Example
-- Input (IDMC JSON):
+### Examples
+- Simple (IDMC JSON):
 ```json
 {
   "mappings": [
@@ -71,6 +71,31 @@ make test             # or: make coverage
 INSERT INTO TGT_TABLE (id, name)
 SELECT id, name
 FROM SRC_TABLE;
+```
+
+- Multi-source join (IDMC JSON):
+```json
+{
+  "mappings": [
+    {
+      "name": "m_join",
+      "sources": [
+        {"name": "SRC_A", "fields": ["id", "name"]},
+        {"name": "SRC_B", "fields": ["id", "amount"]}
+      ],
+      "target": {"name": "TGT", "fields": ["id", "name", "amount"]}
+    }
+  ]
+}
+```
+
+- Output (generated SQL):
+```sql
+-- Mapping: m_join -> TGT
+INSERT INTO TGT (id, name, amount)
+SELECT id, SRC_A.name, SRC_B.amount
+FROM SRC_A
+JOIN SRC_B USING (id);
 ```
 
 ## Limitations
