@@ -11,9 +11,9 @@ A minimal, Python 3.11+ project scaffold with a small CLI, tests, and batteries-
 # Create and sync a local environment
 make bootstrap
 
-# Run the app (prints a greeting)
-make run              # or: uv run python -m codex_test
-codex-test Alice      # installed via editable package
+# Run the app (prints the number of mappings in a workflow)
+make run ARGS=path/to/workflow.xml # or: uv run python -m codex_test path/to/workflow.xml
+codex-test path/to/workflow.xml    # installed via editable package
 
 # Run checks
 make fmt && make lint && make typecheck
@@ -23,9 +23,8 @@ make test             # or: make coverage
 ## Usage
 - Module: `codex_test`
 - CLI: `codex-test`
-- Examples:
-  - `python -m codex_test` → "Hello, world!"
-  - `codex-test Alice` → "Hello, Alice!"
+- Example:
+  - `codex-test path/to/workflow.xml` → `3`
 
 ## Project Structure
 ```
