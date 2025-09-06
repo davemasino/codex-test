@@ -1,6 +1,6 @@
 # codex-test
 
-A minimal, Python 3.11+ project scaffold with a small CLI, tests, and batteries-included developer tooling. It uses `uv` for fast environment and dependency management, `pytest` for tests, `ruff`/`black` for lint/format, and `mypy` for optional static typing.
+An Informatica mapping-to-SQL converter. This CLI reads Informatica IDMC (JSON) or PowerCenter (XML) workflow documents and generates ANSI SQL for each mapping. It can print SQL to stdout or write one file per mapping.
 
 ## Requirements
 - Python 3.11+
@@ -11,7 +11,7 @@ A minimal, Python 3.11+ project scaffold with a small CLI, tests, and batteries-
 # Create and sync a local environment
 make bootstrap
 
-# Run the app (prints ANSI SQL for each mapping)
+# Run the converter (prints ANSI SQL for each mapping)
 # Supports Informatica IDMC (JSON) and PowerCenter (XML)
 make run ARGS=path/to/workflow.json # or: uv run python -m codex_test path/to/workflow.json
 codex-test path/to/workflow.json    # installed via editable package
