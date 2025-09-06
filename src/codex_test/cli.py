@@ -11,7 +11,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="codex-test",
         description=(
-            "Convert Informatica PowerCenter mappings in a workflow XML to ANSI SQL"
+            "Convert Informatica mappings to ANSI SQL (IDMC JSON or PowerCenter XML)"
         ),
     )
     parser.add_argument("workflow", type=Path, help="Path to workflow XML document")

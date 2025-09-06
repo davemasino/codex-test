@@ -12,8 +12,9 @@ A minimal, Python 3.11+ project scaffold with a small CLI, tests, and batteries-
 make bootstrap
 
 # Run the app (prints ANSI SQL for each mapping)
-make run ARGS=path/to/workflow.xml # or: uv run python -m codex_test path/to/workflow.xml
-codex-test path/to/workflow.xml    # installed via editable package
+# Supports IDMC JSON or PowerCenter XML
+make run ARGS=path/to/workflow.json # or: uv run python -m codex_test path/to/workflow.json
+codex-test path/to/workflow.json    # installed via editable package
 
 # Run checks
 make fmt && make lint && make typecheck
@@ -24,8 +25,9 @@ make test             # or: make coverage
 - Module: `codex_test`
 - CLI: `codex-test`
 - Example:
-  - `codex-test path/to/workflow.xml` → emits SQL per mapping on stdout
-  - `codex-test path/to/workflow.xml --output-dir out/` → writes one `<mapping>.sql` file per mapping
+  - `codex-test path/to/workflow.json` → emits SQL per mapping on stdout
+  - `codex-test path/to/workflow.json --output-dir out/` → writes one `<mapping>.sql` file per mapping
+  - Also accepts PowerCenter XML for backward compatibility
 
 ## Project Structure
 ```

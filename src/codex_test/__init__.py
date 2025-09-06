@@ -1,4 +1,4 @@
-"""Utilities for working with Informatica PowerCenter workflows.
+"""Utilities for working with Informatica PowerCenter and IDMC workflows.
 
 This module provides minimal parsing of Informatica PowerCenter workflow XML
 documents and a best-effort conversion of simple mappings to ANSI SQL. The
@@ -10,6 +10,7 @@ placeholder SQL statement.
 
 from __future__ import annotations
 
+import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -25,7 +26,7 @@ __version__ = "0.1.0"
 
 
 def count_mappings(workflow_path: str | Path) -> int:
-    """Count ``MAPPING`` elements in a workflow document.
+    """Count mappings in a workflow document (PowerCenter XML or IDMC JSON).
 
     Parameters
     ----------
@@ -38,8 +39,17 @@ def count_mappings(workflow_path: str | Path) -> int:
         Number of ``MAPPING`` elements found in the document.
     """
 
-    tree = ET.parse(workflow_path)
-    return len(tree.findall(".//MAPPING"))
+    p = Path(workflow_path)
+    if _looks_like_json(p):
+        try:
+            data = json.loads(p.read_text())
+        except Exception:
+            # Fallback: treat as zero if unreadable JSON
+            return 0
+        return len(_iter_idmc_mappings(data))
+    else:
+        tree = ET.parse(p)
+        return len(tree.findall(".//MAPPING"))
 
 
 def _text_identifier(name: str | None) -> str:
@@ -63,7 +73,7 @@ def _first_child(elem: ET.Element, xpath: str) -> ET.Element | None:
 
 
 def convert_mappings_to_sql(workflow_path: str | Path) -> Dict[str, str]:
-    """Convert each mapping in a workflow to a best-effort ANSI-SQL string.
+    """Convert each mapping (PowerCenter XML or IDMC JSON) to ANSI-SQL.
 
     The converter handles simple patterns where a mapping declares one source
     transformation (TYPE contains "Source") and one target transformation (TYPE
@@ -83,10 +93,21 @@ def convert_mappings_to_sql(workflow_path: str | Path) -> Dict[str, str]:
         Mapping name to generated SQL text.
     """
 
-    tree = ET.parse(workflow_path)
-    root = tree.getroot()
-
+    p = Path(workflow_path)
     sql_by_mapping: Dict[str, str] = {}
+
+    if _looks_like_json(p):
+        try:
+            data = json.loads(p.read_text())
+        except Exception:
+            return {}
+        for m_name, src_name, tgt_name, cols in _idmc_mapping_details(data):
+            sql_by_mapping[m_name] = _emit_insert_select(m_name, tgt_name, src_name, cols)
+        return sql_by_mapping
+
+    # PowerCenter XML path (legacy support)
+    tree = ET.parse(p)
+    root = tree.getroot()
 
     for m in root.findall(".//MAPPING"):
         m_name = m.get("NAME") or "UNKNOWN_MAPPING"
@@ -113,20 +134,7 @@ def convert_mappings_to_sql(workflow_path: str | Path) -> Dict[str, str]:
                 # Fall back to whichever side has fields; if neither, use '*'
                 cols = tgt_fields or src_fields
 
-            if cols:
-                cols_csv = ", ".join(cols)
-                sql = (
-                    f"-- Mapping: {m_name}\n"
-                    f"INSERT INTO {tgt_name} ({cols_csv})\n"
-                    f"SELECT {cols_csv} FROM {src_name};\n"
-                )
-            else:
-                sql = (
-                    f"-- Mapping: {m_name} (no fields found)\n"
-                    f"-- Unable to infer columns; emitting broad SELECT.\n"
-                    f"INSERT INTO {tgt_name}\n"
-                    f"SELECT * FROM {src_name};\n"
-                )
+            sql = _emit_insert_select(m_name, tgt_name, src_name, cols)
         else:
             # Could not infer source/target; emit a placeholder
             sql = (
@@ -138,3 +146,88 @@ def convert_mappings_to_sql(workflow_path: str | Path) -> Dict[str, str]:
         sql_by_mapping[m_name] = sql
 
     return sql_by_mapping
+
+
+def _emit_insert_select(m_name: str, tgt_name: str, src_name: str, cols: list[str]) -> str:
+    if cols:
+        cols_csv = ", ".join(cols)
+        return (
+            f"-- Mapping: {m_name}\n"
+            f"INSERT INTO {tgt_name} ({cols_csv})\n"
+            f"SELECT {cols_csv} FROM {src_name};\n"
+        )
+    return (
+        f"-- Mapping: {m_name} (no fields found)\n"
+        f"-- Unable to infer columns; emitting broad SELECT.\n"
+        f"INSERT INTO {tgt_name}\n"
+        f"SELECT * FROM {src_name};\n"
+    )
+
+
+def _looks_like_json(path: Path) -> bool:
+    if path.suffix.lower() == ".json":
+        return True
+    # Peek first non-whitespace char
+    try:
+        for ch in path.read_text(encoding="utf-8"):
+            if not ch.isspace():
+                return ch in "[{"  # JSON object/array
+    except Exception:
+        return False
+    return False
+
+
+def _iter_idmc_mappings(data: dict) -> List[dict]:
+    # Primary expected structure: { "mappings": [ {"name":..., "source":..., "target":...} ] }
+    if isinstance(data, dict):
+        if isinstance(data.get("mappings"), list):
+            return [m for m in data["mappings"] if isinstance(m, dict)]
+        # Alternate: { "objects": [ {"type":"mapping", ...} ] }
+        if isinstance(data.get("objects"), list):
+            return [m for m in data["objects"] if isinstance(m, dict) and (m.get("type") or "").lower() == "mapping"]
+    return []
+
+
+def _normalize_field_list(fields: object) -> List[str]:
+    cols: List[str] = []
+    if isinstance(fields, list):
+        for f in fields:
+            if isinstance(f, str):
+                nm = f.strip()
+                if nm:
+                    cols.append(nm)
+            elif isinstance(f, dict):
+                nm = str(f.get("name") or f.get("NAME") or "").strip()
+                if nm:
+                    cols.append(nm)
+    return cols
+
+
+def _idmc_mapping_details(data: dict):
+    """Yield tuples of (mapping_name, source_name, target_name, columns)."""
+    for m in _iter_idmc_mappings(data):
+        m_name = str(m.get("name") or m.get("NAME") or "UNKNOWN_MAPPING").strip() or "UNKNOWN_MAPPING"
+
+        src = m.get("source") or {}
+        tgt = m.get("target") or {}
+
+        # Some structures may have arrays of sources/targets; pick the first
+        if isinstance(src, list) and src:
+            src = src[0]
+        if isinstance(tgt, list) and tgt:
+            tgt = tgt[0]
+
+        src_name = _text_identifier(str((src or {}).get("name") or (src or {}).get("NAME") or "SOURCE")) or "SOURCE"
+        tgt_name = _text_identifier(str((tgt or {}).get("name") or (tgt or {}).get("NAME") or "TARGET")) or "TARGET"
+
+        # Columns: prefer target fields' order, intersect with source if present
+        tgt_fields = _normalize_field_list((tgt or {}).get("fields"))
+        src_fields = _normalize_field_list((src or {}).get("fields"))
+
+        if tgt_fields and src_fields:
+            src_set = {c.lower() for c in src_fields}
+            cols = [c for c in tgt_fields if c.lower() in src_set]
+        else:
+            cols = tgt_fields or src_fields
+
+        yield m_name, src_name, tgt_name, cols
