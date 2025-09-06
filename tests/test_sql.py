@@ -4,7 +4,6 @@ from pathlib import Path
 
 import codex_test as pkg
 
-
 SIMPLE_MAPPING = """<?xml version='1.0' encoding='UTF-8'?>
 <REPOSITORY>
   <FOLDER>
@@ -19,7 +18,7 @@ SIMPLE_MAPPING = """<?xml version='1.0' encoding='UTF-8'?>
       </TRANSFORMATION>
     </MAPPING>
   </FOLDER>
-  
+
 </REPOSITORY>
 """
 
@@ -32,4 +31,3 @@ def test_convert_mappings_to_sql_basic(tmp_path: Path) -> None:
     sql = out["m_simple"]
     assert "INSERT INTO TGT_TABLE (id, name)" in sql
     assert "SELECT id, name FROM SRC_TABLE;" in sql
-

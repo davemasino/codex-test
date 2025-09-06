@@ -4,7 +4,6 @@ from pathlib import Path
 
 import codex_test as pkg
 
-
 SIMPLE_IDMC = {
     "mappings": [
         {
@@ -30,4 +29,3 @@ def test_convert_mappings_to_sql_idmc(tmp_path: Path) -> None:
     sql = out["m_simple"]
     assert "INSERT INTO TGT_TABLE (id, name)" in sql
     assert "SELECT id, name FROM SRC_TABLE;" in sql
-

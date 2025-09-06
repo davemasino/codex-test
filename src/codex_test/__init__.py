@@ -14,8 +14,6 @@ import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from typing import Dict, List
-
 __all__ = [
     "__version__",
     "count_mappings",
@@ -63,7 +61,7 @@ def _text_identifier(name: str | None) -> str:
     return (name or "").strip()
 
 
-def _fields_from_transformation(xform: ET.Element) -> List[str]:
+def _fields_from_transformation(xform: ET.Element) -> list[str]:
     return [f.get("NAME", "").strip() for f in xform.findall("FIELD") if f.get("NAME")]
 
 
@@ -72,7 +70,7 @@ def _first_child(elem: ET.Element, xpath: str) -> ET.Element | None:
     return found[0] if found else None
 
 
-def convert_mappings_to_sql(workflow_path: str | Path) -> Dict[str, str]:
+def convert_mappings_to_sql(workflow_path: str | Path) -> dict[str, str]:
     """Convert each mapping (PowerCenter XML or IDMC JSON) to ANSI-SQL.
 
     The converter handles simple patterns where a mapping declares one source
@@ -94,7 +92,7 @@ def convert_mappings_to_sql(workflow_path: str | Path) -> Dict[str, str]:
     """
 
     p = Path(workflow_path)
-    sql_by_mapping: Dict[str, str] = {}
+    sql_by_mapping: dict[str, str] = {}
 
     if _looks_like_json(p):
         try:
@@ -102,7 +100,9 @@ def convert_mappings_to_sql(workflow_path: str | Path) -> Dict[str, str]:
         except Exception:
             return {}
         for m_name, src_name, tgt_name, cols in _idmc_mapping_details(data):
-            sql_by_mapping[m_name] = _emit_insert_select(m_name, tgt_name, src_name, cols)
+            sql_by_mapping[m_name] = _emit_insert_select(
+                m_name, tgt_name, src_name, cols
+            )
         return sql_by_mapping
 
     # PowerCenter XML path (legacy support)
@@ -148,7 +148,9 @@ def convert_mappings_to_sql(workflow_path: str | Path) -> Dict[str, str]:
     return sql_by_mapping
 
 
-def _emit_insert_select(m_name: str, tgt_name: str, src_name: str, cols: list[str]) -> str:
+def _emit_insert_select(
+    m_name: str, tgt_name: str, src_name: str, cols: list[str]
+) -> str:
     if cols:
         cols_csv = ", ".join(cols)
         return (
@@ -177,19 +179,24 @@ def _looks_like_json(path: Path) -> bool:
     return False
 
 
-def _iter_idmc_mappings(data: dict) -> List[dict]:
-    # Primary expected structure: { "mappings": [ {"name":..., "source":..., "target":...} ] }
+def _iter_idmc_mappings(data: dict) -> list[dict]:
+    # Primary expected structure:
+    # {"mappings": [{"name": ..., "source": ..., "target": ...}]}
     if isinstance(data, dict):
         if isinstance(data.get("mappings"), list):
             return [m for m in data["mappings"] if isinstance(m, dict)]
         # Alternate: { "objects": [ {"type":"mapping", ...} ] }
         if isinstance(data.get("objects"), list):
-            return [m for m in data["objects"] if isinstance(m, dict) and (m.get("type") or "").lower() == "mapping"]
+            return [
+                m
+                for m in data["objects"]
+                if isinstance(m, dict) and (m.get("type") or "").lower() == "mapping"
+            ]
     return []
 
 
-def _normalize_field_list(fields: object) -> List[str]:
-    cols: List[str] = []
+def _normalize_field_list(fields: object) -> list[str]:
+    cols: list[str] = []
     if isinstance(fields, list):
         for f in fields:
             if isinstance(f, str):
@@ -206,7 +213,10 @@ def _normalize_field_list(fields: object) -> List[str]:
 def _idmc_mapping_details(data: dict):
     """Yield tuples of (mapping_name, source_name, target_name, columns)."""
     for m in _iter_idmc_mappings(data):
-        m_name = str(m.get("name") or m.get("NAME") or "UNKNOWN_MAPPING").strip() or "UNKNOWN_MAPPING"
+        m_name = (
+            str(m.get("name") or m.get("NAME") or "UNKNOWN_MAPPING").strip()
+            or "UNKNOWN_MAPPING"
+        )
 
         src = m.get("source") or {}
         tgt = m.get("target") or {}
@@ -217,8 +227,18 @@ def _idmc_mapping_details(data: dict):
         if isinstance(tgt, list) and tgt:
             tgt = tgt[0]
 
-        src_name = _text_identifier(str((src or {}).get("name") or (src or {}).get("NAME") or "SOURCE")) or "SOURCE"
-        tgt_name = _text_identifier(str((tgt or {}).get("name") or (tgt or {}).get("NAME") or "TARGET")) or "TARGET"
+        src_name = (
+            _text_identifier(
+                str((src or {}).get("name") or (src or {}).get("NAME") or "SOURCE")
+            )
+            or "SOURCE"
+        )
+        tgt_name = (
+            _text_identifier(
+                str((tgt or {}).get("name") or (tgt or {}).get("NAME") or "TARGET")
+            )
+            or "TARGET"
+        )
 
         # Columns: prefer target fields' order, intersect with source if present
         tgt_fields = _normalize_field_list((tgt or {}).get("fields"))

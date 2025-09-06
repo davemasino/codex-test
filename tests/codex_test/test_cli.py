@@ -7,7 +7,6 @@ import pytest
 import codex_test as pkg
 from codex_test.cli import main, parse_args
 
-
 SIMPLE_MAPPING = """<?xml version='1.0' encoding='UTF-8'?>
 <REPOSITORY>
   <FOLDER>
