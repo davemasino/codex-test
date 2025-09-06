@@ -26,7 +26,7 @@ make test             # or: make coverage
 - CLI: `codex-test`
 - Example:
   - `codex-test path/to/workflow.json` → emits SQL per mapping on stdout
-  - `codex-test path/to/workflow.json --output-dir out/` → writes one `<mapping>.sql` file per mapping
+  - `codex-test path/to/workflow.json --output-dir output/` → writes one `<mapping>.sql` file per mapping
   - Also accepts PowerCenter XML for backward compatibility
 
 ## Informatica Conversion
