@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import re
-import sys
+from pathlib import Path
 
 import pytest
 
@@ -9,28 +8,40 @@ import codex_test as pkg
 from codex_test.cli import main, parse_args
 
 
-def test_parse_args_default():
-    args = parse_args([])
-    assert args.name == "world"
+SIMPLE_MAPPING = """<?xml version='1.0' encoding='UTF-8'?>
+<REPOSITORY>
+  <FOLDER>
+    <MAPPING NAME='m_simple'>
+      <TRANSFORMATION NAME='SRC_TABLE' TYPE='Source Definition'>
+        <FIELD NAME='id'/>
+        <FIELD NAME='name'/>
+      </TRANSFORMATION>
+      <TRANSFORMATION NAME='TGT_TABLE' TYPE='Target Definition'>
+        <FIELD NAME='id'/>
+        <FIELD NAME='name'/>
+      </TRANSFORMATION>
+    </MAPPING>
+  </FOLDER>
+</REPOSITORY>
+"""
 
 
-def test_parse_args_custom():
-    args = parse_args(["Alice"])
-    assert args.name == "Alice"
+def test_parse_args_accepts_workflow(tmp_path: Path) -> None:
+    wf = tmp_path / "wf.xml"
+    wf.write_text(SIMPLE_MAPPING)
+    args = parse_args([str(wf)])
+    assert args.workflow == wf
+    assert args.output_dir is None
 
 
-def test_main_default_prints_and_returns_zero(capsys: pytest.CaptureFixture[str]):
-    code = main([])
-    captured = capsys.readouterr()
+def test_main_prints_sql(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    wf = tmp_path / "wf.xml"
+    wf.write_text(SIMPLE_MAPPING)
+    code = main([str(wf)])
+    captured = capsys.readouterr().out
     assert code == 0
-    assert captured.out == "Hello, world!\n"
-
-
-def test_main_custom_prints_and_returns_zero(capsys: pytest.CaptureFixture[str]):
-    code = main(["Alice"])
-    captured = capsys.readouterr()
-    assert code == 0
-    assert captured.out == "Hello, Alice!\n"
+    assert "INSERT INTO TGT_TABLE (id, name)" in captured
+    assert "SELECT id, name FROM SRC_TABLE;" in captured
 
 
 def test_version_flag_prints_and_exits(capsys: pytest.CaptureFixture[str]):
@@ -40,4 +51,3 @@ def test_version_flag_prints_and_exits(capsys: pytest.CaptureFixture[str]):
     assert exc.value.code == 0
     out = capsys.readouterr().out
     assert out == f"codex-test {pkg.__version__}\n"
-

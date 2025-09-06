@@ -4,15 +4,23 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import __version__, count_mappings
+from . import __version__, convert_mappings_to_sql
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="codex-test",
-        description="Count mappings in an Informatica PowerCenter workflow document",
+        description=(
+            "Convert Informatica PowerCenter mappings in a workflow XML to ANSI SQL"
+        ),
     )
     parser.add_argument("workflow", type=Path, help="Path to workflow XML document")
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Optional directory to write one <mapping>.sql per mapping",
+    )
     parser.add_argument(
         "--version", action="version", version=f"codex-test {__version__}"
     )
@@ -21,8 +29,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    total = count_mappings(args.workflow)
-    print(total)
+    sql_map = convert_mappings_to_sql(args.workflow)
+
+    if args.output_dir:
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+        for name, sql in sql_map.items():
+            out = args.output_dir / f"{name}.sql"
+            out.write_text(sql)
+    else:
+        # Print to stdout, separated by blank lines in a stable order
+        for idx, name in enumerate(sorted(sql_map)):
+            if idx:
+                print()
+            print(sql_map[name], end="")
     return 0
 
 

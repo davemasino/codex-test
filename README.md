@@ -11,7 +11,7 @@ A minimal, Python 3.11+ project scaffold with a small CLI, tests, and batteries-
 # Create and sync a local environment
 make bootstrap
 
-# Run the app (prints the number of mappings in a workflow)
+# Run the app (prints ANSI SQL for each mapping)
 make run ARGS=path/to/workflow.xml # or: uv run python -m codex_test path/to/workflow.xml
 codex-test path/to/workflow.xml    # installed via editable package
 
@@ -24,7 +24,8 @@ make test             # or: make coverage
 - Module: `codex_test`
 - CLI: `codex-test`
 - Example:
-  - `codex-test path/to/workflow.xml` → `3`
+  - `codex-test path/to/workflow.xml` → emits SQL per mapping on stdout
+  - `codex-test path/to/workflow.xml --output-dir out/` → writes one `<mapping>.sql` file per mapping
 
 ## Project Structure
 ```
