@@ -1,0 +1,13 @@
+{
+  "mappings": [
+    {
+      "name": "m_join",
+      "sources": [
+        {"name": "SRC_A", "fields": ["id", "name"]},
+        {"name": "SRC_B", "fields": ["id", "amount"]}
+      ],
+      "target": {"name": "TGT", "fields": ["id", "name", "amount"]}
+    }
+  ]
+}
+

@@ -1,0 +1,9 @@
+{
+  "mappings": [
+    {
+      "name": "m_simple",
+      "source": {"name": "SRC_TABLE", "fields": ["id", "name"]},
+      "target": {"name": "TGT_TABLE", "fields": ["id", "name"]}
+    }
+  ]
+}

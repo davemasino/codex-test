@@ -1,0 +1,256 @@
+{
+  "info": {
+    "exportDate": "2025-09-05T00:00:00Z",
+    "product": "Informatica Intelligent Data Management Cloud (IDMC)",
+    "service": "Cloud Data Integration",
+    "formatVersion": "3.0",
+    "notes": "Sample package: OLTP MySQL source to Oracle target. Replace connection creds/paths/objects for your tenant."
+  },
+  "objects": [
+    {
+      "type": "CONNECTION",
+      "id": "CONN_mysql",
+      "name": "cnx_MySQL_OLTP_DEMO",
+      "subtype": "MySQL",
+      "folderPath": "/Samples/OLTP2Oracle/Connections",
+      "properties": {
+        "host": "mysql-oltp.example.local",
+        "port": 3306,
+        "database": "appdb",
+        "username": "svc_idmc",
+        "secureFields": { "password": "${secure:MYSQL_PWD}" },
+        "sslMode": "PREFERRED"
+      }
+    },
+    {
+      "type": "CONNECTION",
+      "id": "CONN_oracle",
+      "name": "cnx_Oracle_DWH_DEMO",
+      "subtype": "Oracle",
+      "folderPath": "/Samples/OLTP2Oracle/Connections",
+      "properties": {
+        "host": "oracle-dwh.example.local",
+        "port": 1521,
+        "serviceName": "ORCLPDB1",
+        "username": "DWH_USER",
+        "secureFields": { "password": "${secure:ORACLE_PWD}" }
+      }
+    },
+
+    {
+      "type": "MAPPING",
+      "id": "MAP_dim",
+      "name": "m_OLTP_Customers_to_DIM_CUSTOMER",
+      "folderPath": "/Samples/OLTP2Oracle/Project",
+      "description": "Incrementally upsert OLTP customers into Oracle DIM_CUSTOMER using a watermark on updated_at.",
+      "parameters": [
+        { "name": "p_SrcTable", "type": "String", "default": "customers" },
+        { "name": "p_TgtTable", "type": "String", "default": "DIM_CUSTOMER" },
+        { "name": "p_Watermark", "type": "String", "default": "1970-01-01 00:00:00" }
+      ],
+      "sources": [
+        {
+          "name": "src_Customers",
+          "connectionId": "CONN_mysql",
+          "object": "${p_SrcTable}",
+          "filter": "updated_at > TO_TIMESTAMP('${p_Watermark}')",
+          "fields": [
+            { "name": "id", "type": "integer" },
+            { "name": "first_name", "type": "string" },
+            { "name": "last_name", "type": "string" },
+            { "name": "email", "type": "string" },
+            { "name": "updated_at", "type": "timestamp" }
+          ]
+        }
+      ],
+      "transformations": [
+        {
+          "type": "Expression",
+          "name": "exp_Normalize",
+          "fields": [
+            { "name": "CUSTOMER_KEY", "expr": "id" },
+            { "name": "FIRST_NAME", "expr": "INITCAP(TRIM(first_name))" },
+            { "name": "LAST_NAME", "expr": "INITCAP(TRIM(last_name))" },
+            { "name": "EMAIL", "expr": "LOWER(TRIM(email))" },
+            { "name": "EFFECTIVE_FROM", "expr": "SYSDATE()" }
+          ]
+        }
+      ],
+      "targets": [
+        {
+          "name": "tgt_DIM_CUSTOMER",
+          "connectionId": "CONN_oracle",
+          "object": "${p_TgtTable}",
+          "operation": "UPSERT",
+          "keys": ["CUSTOMER_KEY"],
+          "fieldMapping": [
+            { "source": "CUSTOMER_KEY", "target": "CUSTOMER_KEY" },
+            { "source": "FIRST_NAME", "target": "FIRST_NAME" },
+            { "source": "LAST_NAME", "target": "LAST_NAME" },
+            { "source": "EMAIL", "target": "EMAIL" },
+            { "source": "EFFECTIVE_FROM", "target": "EFFECTIVE_FROM" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "type": "MAPPING",
+      "id": "MAP_fact",
+      "name": "m_OLTP_Orders_to_FACT_ORDER",
+      "folderPath": "/Samples/OLTP2Oracle/Project",
+      "description": "Load transactional orders into Oracle FACT_ORDER with derived measures; incremental by updated_at.",
+      "parameters": [
+        { "name": "p_SrcTable", "type": "String", "default": "orders" },
+        { "name": "p_TgtTable", "type": "String", "default": "FACT_ORDER" },
+        { "name": "p_Watermark", "type": "String", "default": "1970-01-01 00:00:00" }
+      ],
+      "sources": [
+        {
+          "name": "src_Orders",
+          "connectionId": "CONN_mysql",
+          "object": "${p_SrcTable}",
+          "filter": "updated_at > TO_TIMESTAMP('${p_Watermark}')",
+          "fields": [
+            { "name": "order_id", "type": "integer" },
+            { "name": "customer_id", "type": "integer" },
+            { "name": "product_id", "type": "integer" },
+            { "name": "unit_price", "type": "decimal" },
+            { "name": "quantity", "type": "integer" },
+            { "name": "order_dt", "type": "date" },
+            { "name": "updated_at", "type": "timestamp" }
+          ]
+        }
+      ],
+      "transformations": [
+        {
+          "type": "Expression",
+          "name": "exp_Calc",
+          "fields": [
+            { "name": "AMOUNT", "expr": "unit_price * quantity" },
+            { "name": "LOAD_TS", "expr": "SYSDATE()" }
+          ]
+        }
+      ],
+      "targets": [
+        {
+          "name": "tgt_FACT_ORDER",
+          "connectionId": "CONN_oracle",
+          "object": "${p_TgtTable}",
+          "operation": "UPSERT",
+          "keys": ["ORDER_ID"],
+          "fieldMapping": [
+            { "source": "order_id", "target": "ORDER_ID" },
+            { "source": "customer_id", "target": "CUSTOMER_KEY" },
+            { "source": "product_id", "target": "PRODUCT_ID" },
+            { "source": "AMOUNT", "target": "AMOUNT" },
+            { "source": "order_dt", "target": "ORDER_DT" },
+            { "source": "LOAD_TS", "target": "LOAD_TS" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "type": "MAPPING_TASK",
+      "id": "MTTASK_dim",
+      "name": "mt_DIM_CUSTOMER_Incremental",
+      "folderPath": "/Samples/OLTP2Oracle/Project",
+      "mappingId": "MAP_dim",
+      "description": "Runs customer dim upsert with watermark param.",
+      "runtimeEnvironment": "Default",
+      "parameterValues": {
+        "p_SrcTable": "customers",
+        "p_TgtTable": "DIM_CUSTOMER",
+        "p_Watermark": "${secure:WM_CUSTOMERS}"
+      },
+      "advancedSessionProperties": {
+        "logLevel": "Normal",
+        "errorLimit": 0
+      },
+      "schedule": {
+        "enabled": true,
+        "type": "CRON",
+        "cron": "0 0/30 * * * ?",
+        "timezone": "America/Chicago"
+      }
+    },
+
+    {
+      "type": "MAPPING_TASK",
+      "id": "MTTASK_fact",
+      "name": "mt_FACT_ORDER_Incremental",
+      "folderPath": "/Samples/OLTP2Oracle/Project",
+      "mappingId": "MAP_fact",
+      "description": "Runs orders fact upsert with watermark param.",
+      "runtimeEnvironment": "Default",
+      "parameterValues": {
+        "p_SrcTable": "orders",
+        "p_TgtTable": "FACT_ORDER",
+        "p_Watermark": "${secure:WM_ORDERS}"
+      },
+      "advancedSessionProperties": {
+        "logLevel": "Normal",
+        "errorLimit": 5
+      },
+      "schedule": {
+        "enabled": true,
+        "type": "CRON",
+        "cron": "0 5/30 * * * ?",
+        "timezone": "America/Chicago"
+      }
+    },
+
+    {
+      "type": "TASKFLOW",
+      "id": "TASKFLOW_main",
+      "name": "tf_OLTP_to_Oracle_Incremental",
+      "folderPath": "/Samples/OLTP2Oracle/Project",
+      "description": "Runs DIM then FACT with simple success chaining and failure email.",
+      "start": "Start",
+      "steps": [
+        { "id": "Start", "type": "Start" },
+        {
+          "id": "S_DIM",
+          "type": "Task",
+          "taskType": "MAPPING_TASK",
+          "refId": "MTTASK_dim",
+          "onSuccess": "S_FACT",
+          "onFailure": "Fail"
+        },
+        {
+          "id": "S_FACT",
+          "type": "Task",
+          "taskType": "MAPPING_TASK",
+          "refId": "MTTASK_fact",
+          "onSuccess": "End",
+          "onFailure": "Fail"
+        },
+        {
+          "id": "Fail",
+          "type": "Assignment",
+          "assign": [{ "name": "v_Status", "value": "'FAILED'" }],
+          "onSuccess": "Notify"
+        },
+        {
+          "id": "Notify",
+          "type": "Notification",
+          "emailTo": "${p_NotifyEmail}",
+          "subject": "Taskflow Failure: ${v_Status}",
+          "body": "Check logs in IDMC."
+        },
+        { "id": "End", "type": "End" }
+      ],
+      "parameters": [
+        { "name": "p_NotifyEmail", "type": "String", "default": "dataops@example.com" }
+      ]
+    }
+  ],
+
+  "dependencies": [
+    { "from": "MTTASK_dim", "to": "MAP_dim" },
+    { "from": "MTTASK_fact", "to": "MAP_fact" },
+    { "from": "TASKFLOW_main", "to": "MTTASK_dim" },
+    { "from": "TASKFLOW_main", "to": "MTTASK_fact" }
+  ]
+}
