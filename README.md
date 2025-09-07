@@ -21,6 +21,13 @@ make fmt && make lint && make typecheck
 make test             # or: make coverage
 ```
 
+## LLM-powered Conversion (optional)
+- Provider: OpenAI
+- Auth: set `OPENAI_API_KEY` in your environment or copy `.env.example` to `.env` and set the key there (loaded in dev if `python-dotenv` is installed).
+- CLI:
+  - `codex-llm path/to/workflow.json` → prints model-generated SQL for IDMC JSON
+  - Optional: `--model gpt-4o-mini` (default)
+
 ## Usage
 - Module: `codex_test`
 - CLI: `codex-test`
