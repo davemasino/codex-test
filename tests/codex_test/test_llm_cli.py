@@ -25,3 +25,6 @@ def test_llm_cli_main_prints(monkeypatch, tmp_path: Path, capsys) -> None:
     out = capsys.readouterr().out
     assert code == 0
     assert out == "SQL\n"
+
+
+# Note: Writing to --output-dir is covered by the main CLI tests

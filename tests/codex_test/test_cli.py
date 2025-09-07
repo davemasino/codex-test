@@ -29,6 +29,18 @@ def test_main_prints_sql(
     assert captured == "SQL\n"
 
 
+def test_main_writes_output_dir(monkeypatch, tmp_path: Path) -> None:
+    wf = tmp_path / "wf.json"
+    wf.write_text("{}")
+    outdir = tmp_path / "output"
+    monkeypatch.setattr(cli, "llm_convert_idmc_to_sql", lambda p: "SELECT 1;\n")
+    code = main([str(wf), "--output-dir", str(outdir)])
+    assert code == 0
+    out_file = outdir / f"{wf.stem}.sql"
+    assert out_file.exists()
+    assert out_file.read_text() == "SELECT 1;\n"
+
+
 def test_version_flag_prints_and_exits(capsys: pytest.CaptureFixture[str]):
     # argparse's version action prints to stdout and exits with code 0
     with pytest.raises(SystemExit) as exc:

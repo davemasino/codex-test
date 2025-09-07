@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 import codex_test.llm as llm
 
 
@@ -65,3 +67,13 @@ def test_llm_convert_idmc_to_sql_monkeypatched(tmp_path: Path, monkeypatch) -> N
 
     out = llm.llm_convert_idmc_to_sql(wf, model="test-model")
     assert "fake sql" in out
+
+
+def test_get_openai_client_requires_env(monkeypatch) -> None:
+    # Ensure missing API key raises a clear error
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    # Protect against accidental .env loading by stubbing loader to no-op
+    monkeypatch.setattr(llm, "_maybe_load_dotenv", lambda: None)
+    with pytest.raises(RuntimeError) as exc:
+        llm.get_openai_client()
+    assert "OPENAI_API_KEY" in str(exc.value)
