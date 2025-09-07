@@ -30,6 +30,12 @@
 - One logical change per PR; include clear description, rationale, linked issues (`Closes #<id>`), and relevant logs/screenshots.
 - Install hooks: `uv run pre-commit install` (runs Black/Ruff/Mypy on commit if configured). Ensure CI green before request review.
 
+## Branching Strategy
+- Never commit directly to `main` and never develop on `main`.
+- Create a feature branch from the latest `main` for every change (e.g., `feat/…`, `fix/…`, `docs/…`).
+- Open a PR from the feature branch into `main`; request review before merge.
+- Keep PRs focused and small; one logical change per PR.
+
 ## Security & Configuration Tips
 - Do not commit secrets. Provide `.env.example`; load via `python-dotenv` in dev if needed.
 - Pin dependencies in `requirements*.txt` or lock with your chosen tool; update regularly.
