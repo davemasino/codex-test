@@ -76,23 +76,29 @@ def build_idmc_prompt(mapping_json: dict[str, Any]) -> list[dict[str, str]]:
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
-def llm_convert_idmc_to_sql(path: Path, model: str = "gpt-4o-mini") -> str:
+def llm_convert_idmc_to_sql(path: Path, model: str | None = None) -> str:
     """Call OpenAI to convert an IDMC JSON workflow to SQL.
 
     Parameters
     ----------
     path: Path
         Path to an IDMC JSON file.
-    model: str
-        OpenAI model name.
+    model: str | None
+        OpenAI model name. If None, reads from the environment variable
+        `OPENAI_MODEL` (loaded from .env in dev if available), defaulting to
+        "gpt5".
     """
+
+    # Resolve model from argument, env, or fallback
+    _maybe_load_dotenv()
+    resolved_model = model or os.getenv("OPENAI_MODEL") or "gpt5"
 
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     messages = build_idmc_prompt(data)
     client = get_openai_client()
     # Use Chat Completions for broad compatibility
     resp = client.chat.completions.create(
-        model=model,
+        model=resolved_model,
         messages=messages,
         temperature=0,
     )
