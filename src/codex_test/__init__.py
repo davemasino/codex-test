@@ -396,9 +396,18 @@ def _build_select_from_sources(
     """
     if len(sources) == 1:
         src_name, fields = sources[0]
-        cols = target_cols if target_cols else (fields or ["*"])
-        # qualify only if ambiguous (single source -> no need)
-        sel = ", ".join(cols) if cols != ["*"] else "*"
+        # If target columns are specified, ensure each exists; otherwise project NULL
+        if target_cols:
+            src_set = {c.lower() for c in (fields or [])}
+            single_select_exprs = [
+                (c if c.lower() in src_set else f"NULL AS {c}")
+                for c in target_cols
+                if c
+            ]
+            sel = ", ".join(single_select_exprs) if single_select_exprs else "*"
+        else:
+            cols = fields or ["*"]
+            sel = ", ".join(cols) if cols != ["*"] else "*"
         return sel, f"FROM {src_name}", None
 
     commons = _common_fields(sources)

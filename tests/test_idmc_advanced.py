@@ -97,3 +97,23 @@ def test_idmc_field_shapes(tmp_path: Path) -> None:
     assert "JOIN SRC2 USING (id)" in sql
     # Qualify non-common columns
     assert "SELECT id, SRC1.name, SRC2.amount" in sql
+
+
+def test_idmc_single_source_missing_target_fields(tmp_path: Path) -> None:
+    # Target requests a column not in the single source; expect NULL AS <col>
+    data = {
+        "mappings": [
+            {
+                "name": "m_missing",
+                "source": {"name": "SRC", "fields": ["id", "name"]},
+                "target": {"name": "TGT", "fields": ["id", "total"]},
+            }
+        ]
+    }
+    wf = tmp_path / "wf.json"
+    wf.write_text(json.dumps(data))
+    out = pkg.convert_mappings_to_sql(wf)
+    sql = out["m_missing"]
+    assert "INSERT INTO TGT (id, total)" in sql
+    assert "SELECT id, NULL AS total" in sql
+    assert "FROM SRC" in sql
