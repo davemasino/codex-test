@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import os
 from pathlib import Path
 
 from .llm import llm_convert_idmc_to_sql
@@ -15,10 +16,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     p.add_argument("workflow", type=Path, help="Path to IDMC workflow JSON file")
+    # Default model from env var if set, else fallback
+    default_model = os.getenv("OPENAI_MODEL", "gpt5")
     p.add_argument(
         "--model",
-        default="gpt-4o-mini",
-        help="OpenAI model (default: gpt-4o-mini)",
+        default=default_model,
+        help=f"OpenAI model (default: {default_model}; override with OPENAI_MODEL)",
     )
     return p.parse_args(argv)
 
