@@ -4,22 +4,23 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import __version__, convert_mappings_to_sql
+from . import __version__
+from .llm import llm_convert_idmc_to_sql
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="codex-test",
         description=(
-            "Convert Informatica mappings to ANSI SQL (IDMC JSON or PowerCenter XML)"
+            "Generate ANSI SQL from an Informatica IDMC workflow JSON using an LLM"
         ),
     )
-    parser.add_argument("workflow", type=Path, help="Path to workflow XML document")
+    parser.add_argument("workflow", type=Path, help="Path to IDMC workflow JSON")
     parser.add_argument(
         "--output-dir",
         type=Path,
         default=None,
-        help="Optional directory to write one <mapping>.sql per mapping",
+        help="Optional directory to write <stem>.sql with generated SQL",
     )
     parser.add_argument(
         "--version", action="version", version=f"codex-test {__version__}"
@@ -29,19 +30,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    sql_map = convert_mappings_to_sql(args.workflow)
+    sql = llm_convert_idmc_to_sql(args.workflow)
 
     if args.output_dir:
         args.output_dir.mkdir(parents=True, exist_ok=True)
-        for name, sql in sql_map.items():
-            out = args.output_dir / f"{name}.sql"
-            out.write_text(sql)
+        out = args.output_dir / f"{args.workflow.stem}.sql"
+        out.write_text(sql)
     else:
-        # Print to stdout, separated by blank lines in a stable order
-        for idx, name in enumerate(sorted(sql_map)):
-            if idx:
-                print()
-            print(sql_map[name], end="")
+        print(sql)
     return 0
 
 

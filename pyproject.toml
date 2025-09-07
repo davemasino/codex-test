@@ -7,7 +7,9 @@ name = "codex-test"
 version = "0.1.0"
 description = "Minimal Python scaffold for codex-test"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+  "openai>=1.40.0",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -22,6 +24,7 @@ dev = [
 
 [project.scripts]
 codex-test = "codex_test.cli:main"
+codex-llm = "codex_test.llm_cli:main"
 
 [tool.black]
 line-length = 88
@@ -47,4 +50,3 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
-
