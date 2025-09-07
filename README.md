@@ -1,6 +1,6 @@
 # codex-test
 
-An Informatica mapping-to-SQL converter. This CLI reads Informatica IDMC (JSON) or PowerCenter (XML) workflow documents and generates ANSI SQL for each mapping. It can print SQL to stdout or write one file per mapping.
+An Informatica mapping-to-SQL converter. This CLI reads Informatica IDMC (JSON) workflow documents and generates ANSI SQL for each mapping using an LLM (OpenAI). It can print SQL to stdout or write a single SQL file per input.
 
 ## Requirements
 - Python 3.11+
@@ -11,8 +11,7 @@ An Informatica mapping-to-SQL converter. This CLI reads Informatica IDMC (JSON) 
 # Create and sync a local environment
 make bootstrap
 
-# Run the converter (prints ANSI SQL for each mapping)
-# Supports Informatica IDMC (JSON) and PowerCenter (XML)
+# Run the converter (LLM-powered; prints ANSI SQL for each mapping)
 make run ARGS=path/to/workflow.json # or: uv run python -m codex_test path/to/workflow.json
 codex-test path/to/workflow.json    # installed via editable package
 
@@ -21,42 +20,34 @@ make fmt && make lint && make typecheck
 make test             # or: make coverage
 ```
 
-## LLM-powered Conversion (optional)
-- Provider: OpenAI
+## LLM-powered Conversion
+- Provider: OpenAI (default model `gpt-4o-mini`)
 - Auth: set `OPENAI_API_KEY` in your environment or copy `.env.example` to `.env` and set the key there (loaded in dev if `python-dotenv` is installed).
 - CLI:
-  - `codex-llm path/to/workflow.json` → prints model-generated SQL for IDMC JSON
-  - Optional: `--model gpt-4o-mini` (default)
+  - `codex-test path/to/workflow.json` → prints model-generated SQL for IDMC JSON
+  - `codex-llm path/to/workflow.json` → equivalent direct LLM entrypoint (advanced options)
 
 ## Usage
 - Module: `codex_test`
 - CLI: `codex-test`
 - Example:
-  - `codex-test path/to/workflow.json` → emits SQL per mapping on stdout
-  - `codex-test path/to/workflow.json --output-dir output/` → writes one `<mapping>.sql` file per mapping
-  - Also accepts PowerCenter XML for backward compatibility
+  - `codex-test path/to/workflow.json` → emits SQL per mapping on stdout (via OpenAI)
+  - `codex-test path/to/workflow.json --output-dir output/` → writes `<stem>.sql` with all generated SQL
 
 ## Informatica Conversion
 - **Input formats:**
-  - IDMC workflow JSON (auto-detected by `.json` or JSON content)
-  - PowerCenter workflow XML (legacy support; auto-detected otherwise)
+  - IDMC workflow JSON
 - **What it does:**
   - Parses mappings and converts them to ANSI-SQL statements.
   - Generates `INSERT INTO ... SELECT ...` for each mapping/target.
-- **IDMC features:**
+- **LLM behavior:**
   - Accepts `source`/`sources` and `target`/`targets` keys.
   - Reads fields from varied shapes: `fields`, `columns`, `ports`, `schema.fields`, `items` (recursively flattened and de-duplicated, order preserved).
-  - Multiple sources supported:
-    - If sources share common column names, generates `JOIN ... USING(common_cols)`.
-    - If no common columns are found, uses `CROSS JOIN` and adds a comment note.
-  - Multiple targets supported: emits one `INSERT` per target from the same `SELECT`.
-  - Column selection prefers target field order; qualifies non-common columns. Missing columns are projected as `NULL AS <col>`.
-- **PowerCenter features:**
-  - Handles simple cases with a single `Source Definition` and `Target Definition` and their `<FIELD NAME='...'>` entries.
-  - For complex transformations (joins, filters, lookups, etc.), emits a commented placeholder `SELECT`.
+-  - May use JOIN ... USING when sources share columns; otherwise CROSS JOIN where needed.
+-  - If a target column is not found, may project `NULL AS <col>`.
 - **Output options:**
   - Print SQL to stdout (default).
-  - Write files with `--output-dir out/` (one `<mapping>.sql` per mapping).
+  - Write files with `--output-dir output/` (writes `<stem>.sql`).
 
 ### Examples
 - Simple (IDMC JSON):
@@ -72,7 +63,7 @@ make test             # or: make coverage
 }
 ```
 
-- Output (generated SQL):
+- Output (generated SQL; output may vary slightly):
 ```sql
 -- Mapping: m_simple -> TGT_TABLE
 INSERT INTO TGT_TABLE (id, name)
@@ -96,7 +87,7 @@ FROM SRC_TABLE;
 }
 ```
 
-- Output (generated SQL):
+- Output (generated SQL; output may vary slightly):
 ```sql
 -- Mapping: m_join -> TGT
 INSERT INTO TGT (id, name, amount)

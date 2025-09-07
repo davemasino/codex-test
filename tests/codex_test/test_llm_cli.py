@@ -18,7 +18,9 @@ def test_llm_cli_main_prints(monkeypatch, tmp_path: Path, capsys) -> None:
     wf = tmp_path / "wf.json"
     wf.write_text("{}")
 
-    monkeypatch.setattr(llm_cli, "llm_convert_idmc_to_sql", lambda path, model="gpt": "SQL")
+    monkeypatch.setattr(
+        llm_cli, "llm_convert_idmc_to_sql", lambda path, model="gpt": "SQL"
+    )
     code = main([str(wf), "--model", "x-model"])
     out = capsys.readouterr().out
     assert code == 0
