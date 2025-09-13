@@ -25,10 +25,10 @@ make test             # or: make coverage
 - Auth/Config: set `OPENAI_API_KEY` and optionally `OPENAI_MODEL` in your environment or copy `.env.example` to `.env` and set them there (loaded in dev if `python-dotenv` is installed).
 - CLI:
   - `codex-test path/to/workflow.json` → prints model-generated SQL for IDMC JSON
-  - `codex-llm path/to/workflow.json` → equivalent direct LLM entrypoint (advanced options; `--model` overrides `OPENAI_MODEL`)
+  - `codex-llm path/to/workflow.json` → equivalent direct LLM entrypoint
 
 ### Agents-based CLI (OpenAI Agents SDK)
-- Command: `codex-agents path/to/workflow.json [--model MODEL]`
+- Command: `codex-agents path/to/workflow.json`
 - Uses the OpenAI Agents SDK with a simple file-reading tool to load the workflow JSON and emit ANSI SQL.
 - Env: `OPENAI_API_KEY` (required), `OPENAI_MODEL` (optional; defaults to `gpt-5-mini` for this CLI)
 
