@@ -43,3 +43,11 @@
 
 ## Notes for This Repository
 - If starting from empty, scaffold `src/`, `tests/`, and `scripts/` as above and add a minimal `pyproject.toml` or `requirements*.txt` to standardize setup.
+
+## Project-Specific Notes
+- Default model: `gpt-5-mini` (overridable via `OPENAI_MODEL`).
+- Env: `OPENAI_API_KEY` required for live runs; `.env` is auto-loaded in dev when `python-dotenv` is present.
+- CLIs:
+  - LLM: `codex-test path/to/workflow.json` or `codex-llm path/to/workflow.json`.
+  - Agents: `codex-agents path/to/workflow.json` (uses OpenAI Agents SDK).
+- Tests: avoid network; agent and LLM calls are mocked. For live validation, run the Agents CLI with a valid key.
