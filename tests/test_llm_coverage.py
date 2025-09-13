@@ -41,3 +41,35 @@ def test_get_openai_client_import_error_path(monkeypatch) -> None:
         llm.get_openai_client()
     assert "openai" in str(exc.value).lower()
 
+
+def test__maybe_load_dotenv_swallows_exceptions(tmp_path: Path, monkeypatch) -> None:
+    # Create a .env in CWD and simulate a loader that raises
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("OPENAI_MODEL=gpt-5-mini\n", encoding="utf-8")
+
+    class _Boom(Exception):
+        pass
+
+    def _raiser(_p):  # type: ignore[no-untyped-def]
+        raise _Boom("boom")
+
+    fake_dotenv = types.SimpleNamespace(load_dotenv=_raiser)
+    monkeypatch.setitem(__import__("sys").modules, "dotenv", fake_dotenv)
+
+    # Should not raise despite internal error
+    llm._maybe_load_dotenv()
+
+
+def test_get_openai_client_constructs_client(monkeypatch) -> None:
+    # Provide API key and a fake OpenAI class to observe construction
+    monkeypatch.setenv("OPENAI_API_KEY", "abc-123")
+
+    class _FakeOpenAI:
+        def __init__(self, api_key: str) -> None:
+            self.api_key = api_key
+
+    fake_openai = types.SimpleNamespace(OpenAI=_FakeOpenAI)
+    monkeypatch.setitem(__import__("sys").modules, "openai", fake_openai)
+
+    client = llm.get_openai_client()
+    assert getattr(client, "api_key", None) == "abc-123"

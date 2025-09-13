@@ -28,6 +28,14 @@ def _install_fake_agents(monkeypatch, expected_text: str = "SELECT 1;") -> None:
         async def run(agent, input: str):  # type: ignore[no-untyped-def]
             # Validate that a tool has been wired in and is callable
             assert agent.tools and callable(agent.tools[0])
+            # Extract workflow_path from the provided input and invoke the tool
+            wf_path = None
+            for line in str(input).splitlines():
+                if line.startswith("workflow_path: "):
+                    wf_path = line.split(": ", 1)[1]
+                    break
+            if wf_path:
+                agent.tools[0](wf_path)
             return _FakeResult(expected_text)
 
     def _function_tool(f):  # type: ignore[no-untyped-def]
