@@ -35,7 +35,7 @@ def agent_convert_idmc_to_sql(path: Path, model: str | None = None) -> str:
             "The 'openai-agents' package is required. Install it in your environment."
         ) from exc
 
-    resolved_model = model or os.getenv("OPENAI_MODEL") or "gpt-4o-mini"
+    resolved_model = model or os.getenv("OPENAI_MODEL") or "gpt-5-mini"
 
     @function_tool
     def read_workflow_json(file_path: str) -> dict[str, Any]:

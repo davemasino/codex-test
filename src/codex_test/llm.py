@@ -86,12 +86,12 @@ def llm_convert_idmc_to_sql(path: Path, model: str | None = None) -> str:
     model: str | None
         OpenAI model name. If None, reads from the environment variable
         `OPENAI_MODEL` (loaded from .env in dev if available), defaulting to
-        "gpt5".
+        "gpt-5-mini".
     """
 
     # Resolve model from argument, env, or fallback
     _maybe_load_dotenv()
-    resolved_model = model or os.getenv("OPENAI_MODEL") or "gpt5"
+    resolved_model = model or os.getenv("OPENAI_MODEL") or "gpt-5-mini"
 
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     messages = build_idmc_prompt(data)

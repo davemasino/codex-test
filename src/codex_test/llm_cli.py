@@ -17,7 +17,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p.add_argument("workflow", type=Path, help="Path to IDMC workflow JSON file")
     # Default model from env var if set, else fallback
-    default_model = os.getenv("OPENAI_MODEL", "gpt5")
+    default_model = os.getenv("OPENAI_MODEL", "gpt-5-mini")
     p.add_argument(
         "--model",
         default=default_model,
